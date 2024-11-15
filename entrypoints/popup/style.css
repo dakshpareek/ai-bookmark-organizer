@@ -1,0 +1,88 @@
+:root {
+    /* Color Palette based on Apple's guidelines */
+    --background-color: #ffffff;
+    --text-color: #000000;
+    --accent-color: #007aff;
+    /* iOS Blue */
+    --button-background: var(--accent-color);
+    --button-text-color: #ffffff;
+    --status-message-color: #333333;
+    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--background-color);
+    font-family: var(--font-family);
+    color: var(--text-color);
+    min-width: 300px;
+    min-height: 200px;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+}
+
+.header {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+.title {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.main-content {
+    width: 100%;
+    text-align: center;
+}
+
+.description {
+    font-size: 14px;
+    margin-bottom: 24px;
+    color: #555555;
+}
+
+.button {
+    display: inline-block;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--button-text-color);
+    background-color: var(--button-background);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background-color 0.3s ease;
+}
+
+.button:disabled {
+    background-color: #cccccc;
+    cursor: default;
+}
+
+.button:hover:not(:disabled) {
+    background-color: #005bb5;
+}
+
+.status-message {
+    margin-top: 16px;
+    font-size: 14px;
+    color: var(--status-message-color);
+}
+
+.status-message.success {
+    color: #28a745;
+}
+
+.status-message.error {
+    color: #dc3545;
+}
