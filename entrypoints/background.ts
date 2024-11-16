@@ -1,5 +1,9 @@
 
 export default defineBackground(() => {
+
+  let categorizationTabId: number | null = null;
+  let contentScriptInjected = false;
+
   console.log('Background script is running.');
 
   interface PendingBookmark {
@@ -198,7 +202,13 @@ export default defineBackground(() => {
   async function organizeAllBookmarks() {
     try {
       console.log('Starting to organize all bookmarks...');
+
+      // Record the start time
+      const startTime = Date.now();
+
       const allBookmarks = await getAllBookmarks();
+
+      const totalBookmarks = allBookmarks.length;
 
       for (const bookmark of allBookmarks) {
         if (bookmark.url) {
@@ -209,7 +219,13 @@ export default defineBackground(() => {
         }
       }
 
-      console.log('Finished organizing all bookmarks.');
+      // Record the end time
+      const endTime = Date.now();
+
+      // Calculate the duration in seconds
+      const durationSeconds = (endTime - startTime) / 1000;
+
+      console.log(`Finished organizing all bookmarks in ${durationSeconds} seconds.`);
     } catch (error) {
       console.error('Error organizing all bookmarks:', error);
     }
@@ -239,38 +255,63 @@ export default defineBackground(() => {
 
   async function categorizeBookmark(title: string, url: string): Promise<string> {
     try {
-      // Get all tabs
-      const tabs = await browser.tabs.query({});
-      console.log(tabs)
-
-      // Find a suitable tab
-      let targetTab;
-
-      for (const tab of tabs) {
-        if (tab.id !== undefined && tab.url && tab.url.startsWith('http')) {
-          // Attempt to inject content script and send message
-          try {
-            await browser.scripting.executeScript({
-              target: { tabId: tab.id },
-              files: ['content-scripts/content.js'],
-            });
-
-            targetTab = tab;
-            break;
-          } catch (injectionError) {
-            console.log(injectionError)
-            // Skip tabs where script injection fails (e.g., due to CSP)
-            continue;
+      // If we already have a categorization tab, check if it's still valid
+      if (categorizationTabId !== null) {
+        try {
+          // Check if the tab is still open
+          const tab = await browser.tabs.get(categorizationTabId);
+          if (!tab || tab.status === 'unloaded') {
+            // Reset if the tab is closed or not usable
+            categorizationTabId = null;
+            contentScriptInjected = false;
           }
+        } catch (error) {
+          // Reset if an error occurs (e.g., tab not found)
+          categorizationTabId = null;
+          contentScriptInjected = false;
         }
       }
 
-      if (!targetTab || !targetTab.id) {
-        throw new Error('No suitable tab found for injecting content script.');
+      // Find a suitable tab if we don't have one
+      if (categorizationTabId === null) {
+        const tabs = await browser.tabs.query({});
+
+        if (!tabs || tabs.length === 0) {
+          throw new Error('No tabs found.');
+        }
+
+        for (const tab of tabs) {
+          if (tab.id !== undefined && tab.url && tab.url.startsWith('http')) {
+            // Try to inject a simple script to check if we can inject into this tab
+            try {
+              // await browser.tabs.executeScript(tab.id, { code: 'void 0;' });
+              categorizationTabId = tab.id;
+              contentScriptInjected = false;
+              console.log(`added script in tab: ${tab.url}`)
+              break;
+            } catch (injectionError) {
+              // Can't inject into this tab, try the next one
+              continue;
+            }
+          }
+        }
+
+        if (categorizationTabId === null) {
+          throw new Error('No suitable tab found for injecting content script.');
+        }
+      }
+
+      // Inject the content script only if not already injected
+      if (!contentScriptInjected) {
+        await browser.scripting.executeScript({
+          target: { tabId: categorizationTabId },
+          files: ['content-scripts/content.js'],
+        });
+        contentScriptInjected = true;
       }
 
       // Send a message to the content script to perform AI categorization
-      const response = await browser.tabs.sendMessage(targetTab.id, {
+      const response = await browser.tabs.sendMessage(categorizationTabId, {
         action: 'categorizeBookmarkAI',
         data: { title, url },
       });
