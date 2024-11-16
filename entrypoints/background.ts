@@ -1,4 +1,3 @@
-import { categorizeBookmark } from './categorization';
 
 export default defineBackground(() => {
   console.log('Background script is running.');
@@ -61,7 +60,7 @@ export default defineBackground(() => {
     const timerId = setTimeout(() => {
       processBookmark(bookmarkId);
       pendingBookmarks.delete(bookmarkId);
-    }, 10000); // Delay of 10 seconds
+    }, 1000); // Delay of 1 seconds
 
     pendingBookmarks.set(bookmarkId, {
       timerId,
@@ -100,7 +99,7 @@ export default defineBackground(() => {
       console.log(`Final URL: ${bookmark.url}`);
 
       // Categorize the bookmark
-      const category = categorizeBookmark(bookmark.title || '', bookmark.url);
+      const category = await categorizeBookmark(bookmark.title || '', bookmark.url);
       console.log(`Categorized under: ${category}`);
 
       // Place the bookmark into the appropriate folder
@@ -204,7 +203,7 @@ export default defineBackground(() => {
       for (const bookmark of allBookmarks) {
         if (bookmark.url) {
           // Categorize and move the bookmark
-          const category = categorizeBookmark(bookmark.title || '', bookmark.url);
+          const category = await categorizeBookmark(bookmark.title || '', bookmark.url);
           console.log(`Categorizing bookmark ID=${bookmark.id} under ${category}`);
           await placeBookmarkInFolder(bookmark.id, category);
         }
@@ -236,5 +235,64 @@ export default defineBackground(() => {
         bookmarks.push(node);
       }
     }
+  }
+
+  async function categorizeBookmark(title: string, url: string): Promise<string> {
+    try {
+      // Get all tabs
+      const tabs = await browser.tabs.query({});
+      console.log(tabs)
+
+      // Find a suitable tab
+      let targetTab;
+
+      for (const tab of tabs) {
+        if (tab.id !== undefined && tab.url && tab.url.startsWith('http')) {
+          // Attempt to inject content script and send message
+          try {
+            await browser.scripting.executeScript({
+              target: { tabId: tab.id },
+              files: ['content-scripts/content.js'],
+            });
+
+            targetTab = tab;
+            break;
+          } catch (injectionError) {
+            console.log(injectionError)
+            // Skip tabs where script injection fails (e.g., due to CSP)
+            continue;
+          }
+        }
+      }
+
+      if (!targetTab || !targetTab.id) {
+        throw new Error('No suitable tab found for injecting content script.');
+      }
+
+      // Send a message to the content script to perform AI categorization
+      const response = await browser.tabs.sendMessage(targetTab.id, {
+        action: 'categorizeBookmarkAI',
+        data: { title, url },
+      });
+
+      if (response.success) {
+        console.log(`AI categorized bookmark as: ${response.category}`);
+        return response.category;
+      } else {
+        console.error('AI categorization failed:', response.error);
+        // Fallback to default categorization
+        return defaultCategorizeBookmark(title, url);
+      }
+    } catch (error) {
+      console.error('Error in categorizeBookmark:', error);
+
+      // Fallback to default categorization
+      return defaultCategorizeBookmark(title, url);
+    }
+  }
+
+  function defaultCategorizeBookmark(title: string, url: string): string {
+    // Your existing dummy categorization logic
+    return 'Others';
   }
 });

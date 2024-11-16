@@ -4,6 +4,9 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   extensionApi: 'chrome',
   manifest: {
-    permissions: ['bookmarks'],
+    permissions: ['bookmarks', 'tabs',
+    'scripting'
+    ],
+    host_permissions: ['<all_urls>'],
   }
 });
