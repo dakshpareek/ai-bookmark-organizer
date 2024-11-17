@@ -209,13 +209,33 @@ export default defineBackground(() => {
       const allBookmarks = await getAllBookmarks();
 
       const totalBookmarks = allBookmarks.length;
+      let processedCount = 0;
 
-      for (const bookmark of allBookmarks) {
-        if (bookmark.url) {
-          // Categorize and move the bookmark
-          const category = await categorizeBookmark(bookmark.title || '', bookmark.url);
-          console.log(`Categorizing bookmark ID=${bookmark.id} under ${category}`);
-          await placeBookmarkInFolder(bookmark.id, category);
+      const batchSize = 25; // Adjust based on testing and AI model limitations
+      const batches: any[][] = [];
+
+      // Create batches
+      for (let i = 0; i < allBookmarks.length; i += batchSize) {
+        batches.push(allBookmarks.slice(i, i + batchSize));
+      }
+
+      for (const batch of batches) {
+        try {
+          // Categorize the batch of bookmarks
+          const categories = await categorizeBookmarksBatch(batch);
+
+          for (let i = 0; i < batch.length; i++) {
+            const bookmark = batch[i];
+            const category = categories[i];
+
+            console.log(`Categorizing bookmark ID=${bookmark.id} under ${category}`);
+            await placeBookmarkInFolder(bookmark.id, category);
+            processedCount++;
+            console.log(`Processed ${processedCount}/${totalBookmarks} bookmarks.`);
+          }
+        } catch (error) {
+          console.error('Error processing batch:', error);
+          // Handle batch error
         }
       }
 
@@ -226,8 +246,17 @@ export default defineBackground(() => {
       const durationSeconds = (endTime - startTime) / 1000;
 
       console.log(`Finished organizing all bookmarks in ${durationSeconds} seconds.`);
+
+      // Send a success message back to the popup with the duration
+      browser.runtime.sendMessage({
+        action: 'organizationComplete',
+        duration: durationSeconds,
+      });
     } catch (error) {
       console.error('Error organizing all bookmarks:', error);
+
+      // Send an error message back to the popup
+      browser.runtime.sendMessage({ action: 'organizationError' });
     }
   }
 
@@ -336,4 +365,110 @@ export default defineBackground(() => {
     // Your existing dummy categorization logic
     return 'Others';
   }
+
+  // New function to categorize a batch of bookmarks
+    async function categorizeBookmarksBatch(bookmarks: any[]): Promise<string[]> {
+      // Prepare titles and URLs for the batch
+      const titles = bookmarks.map((b) => b.title || 'Untitled');
+      const urls = bookmarks.map((b) => b.url);
+
+      // Send the batch to the content script for categorization
+      try {
+        const categories = await categorizeBookmarkBatchInContentScript(titles, urls);
+        return categories;
+      } catch (error) {
+        console.error('Error in categorizeBookmarksBatch:', error);
+        // Fallback to default categories
+        return bookmarks.map(() => defaultCategorizeBookmark('', ''));
+      }
+    }
+
+    // Function to communicate with the content script for batch categorization
+    async function categorizeBookmarkBatchInContentScript(
+      titles: string[],
+      urls: string[]
+    ): Promise<string[]> {
+      try {
+        // Ensure the categorization tab and content script are set up
+        await setupCategorizationTabAndContentScript();
+
+        // Send a message to the content script to perform AI batch categorization
+        const response = await browser.tabs.sendMessage(categorizationTabId!, {
+          action: 'categorizeBookmarkBatchAI',
+          data: { titles, urls },
+        });
+
+        if (response.success) {
+          console.log('AI categorized batch successfully.');
+          return response.categories;
+        } else {
+          console.error('AI batch categorization failed:', response.error);
+          // Fallback to default categories
+          return titles.map(() => 'Others');
+        }
+      } catch (error) {
+        console.error('Error in categorizeBookmarkBatchInContentScript:', error);
+        // Fallback to default categories
+        return titles.map(() => 'Others');
+      }
+    }
+
+    async function setupCategorizationTabAndContentScript() {
+      // If we already have a categorization tab, check if it's still valid
+      if (categorizationTabId !== null) {
+        try {
+          // Check if the tab is still open
+          const tab = await browser.tabs.get(categorizationTabId);
+          if (!tab || tab.status === 'unloaded') {
+            // Reset if the tab is closed or not usable
+            categorizationTabId = null;
+            contentScriptInjected = false;
+          }
+        } catch (error) {
+          // Reset if an error occurs (e.g., tab not found)
+          categorizationTabId = null;
+          contentScriptInjected = false;
+        }
+      }
+
+      // Find a suitable tab if we don't have one
+      if (categorizationTabId === null) {
+        const tabs = await browser.tabs.query({});
+
+        if (!tabs || tabs.length === 0) {
+          throw new Error('No tabs found.');
+        }
+
+        for (const tab of tabs) {
+          if (tab.id !== undefined && tab.url && tab.url.startsWith('http')) {
+            // Try to inject a simple script to check if we can inject into this tab
+            try {
+              // No-op script to check for injection
+              // await browser.tabs.executeScript(tab.id, { code: 'void 0;' });
+              categorizationTabId = tab.id;
+              contentScriptInjected = false;
+              console.log(`Using tab ${tab.id} (${tab.url}) for categorization.`);
+              break;
+            } catch (injectionError) {
+              // Can't inject into this tab, try the next one
+              continue;
+            }
+          }
+        }
+
+        if (categorizationTabId === null) {
+          throw new Error('No suitable tab found for injecting content script.');
+        }
+      }
+
+      // Inject the content script only if not already injected
+      if (!contentScriptInjected) {
+        await browser.scripting.executeScript({
+          target: { tabId: categorizationTabId },
+          files: ['content-scripts/content.js'],
+        });
+        contentScriptInjected = true;
+        console.log('Content script injected.');
+      }
+    }
 });
