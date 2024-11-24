@@ -8,7 +8,7 @@ AI Bookmark Organizer is a Chrome extension that automatically organizes your bo
 
 ## Demo Video
 
-[Watch the Demo Video on YouTube](#)
+[Watch the Demo Video on YouTube](https://youtu.be/wWhv3a-wKeo)
 
 ## Features
 
