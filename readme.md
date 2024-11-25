@@ -59,6 +59,9 @@ For existing bookmarks, you can click the "Organize My Bookmarks" button in the 
 
    ```bash
    cd ai-bookmark-organizer
+
+   # If you do not want to install dependencies than I have already attached latest build in `dist` directory. You can directly use that while unloading plugin.
+
    npm install
    ```
 
@@ -116,7 +119,9 @@ For existing bookmarks, you can click the "Organize My Bookmarks" button in the 
 
    - Open Chrome and navigate to `chrome://extensions/`.
    - Enable **Developer mode** by toggling the switch in the top-right corner.
-   - Click on **Load unpacked** and select the `dist` directory inside your project folder.
+   - Build will be in .output/chrome-mv3 folder.
+   - Click on **Load unpacked** and select the `.output/chrome-mv3` directory inside your project folder.
+
 
 ## Usage
 
